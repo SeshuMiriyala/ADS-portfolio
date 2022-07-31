@@ -1,0 +1,10 @@
+name: IST652
+channels:
+  - defaults
+dependencies:
+  - python=3.9
+  - ipykernel
+  - notebook
+  - matplotlib
+  - numpy
+  - pandas
