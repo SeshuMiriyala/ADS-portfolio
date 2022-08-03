@@ -1,0 +1,338 @@
+---
+title: "An Analysis of the Cost and Salary Potential of Attending College"
+author: "IST 687 - Group 1"
+date: "14 DEC 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE,message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+#Packages & Libraries
+#install.packages("gdata")
+#install.packages("ggmap")
+#install.packages("ggplot2")
+#install.packages("ggpubr")
+#install.packages("gridExtra")
+#install.packages("shiny")
+library(gdata)
+library("ggmap")
+library("ggplot2")
+library(dplyr)
+library("ggpubr")
+library(gridExtra)
+library(ggplot2)
+library(grid)
+library(tibble)
+library(kernlab)
+library(shiny)
+```
+College debt is a major issue in our country. The high cost of post-secondary 
+education means that most potential students will need to find financial aid 
+and will be concerned with how they will pay back their loans. Every year 
+parents, high school students, and adults looking to further their education 
+have to make decisions about where to attend school. With this in mind, we chose to 
+examine data on the cost of schooling in the United States focused on the 
+likely cost, financial aid, and salary potential.
+
+We chose to use a dataset from [Kaggle](https://www.kaggle.com/jessemostipak/college-tuition-diversity-and-pay?select=salary_potential.csv). It was created in March 2020 by compiling data on universities and colleges in the United States including data on state, region, cost, and salary. The data includes 11 columns and over 67,000 rows of data. A quick look at the data gives us an overall understanding of the problem:
+
+Number of Schools: 876
+
+Average cost after financial aid: $19,213 per year
+
+Lowest cost: $5,075
+
+Highest Cost: $83,470
+
+While these high level statistics are interesting they are not enough to assist in choosing a school to attend; more advanced analysis of the data is needed to make it useful. In order to better understand the data and determine the course of our analysis, we established a Trello site to organize our tasks and track our progress at our weekly meetings. We reviewed tasks and created new ones as needed. Over the last ten weeks, we examined the data in a variety of ways and decided we wanted to analyze the earning potential of attending college. The below analysis breaks down colleges by cost, financial aid, earning potential, and combines them to determine the best intersection of cost and earning potential as well as comparing two different predictive models for mid-career salary.
+ 
+Our first task is to import the data and do some basic data cleaning. This creates a data set that we can use to analyze college costs in the United States.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#import data. Note the data file should be in your working directory
+dfCollegeData <- read.csv("Region Salary Tuition Income.csv")
+
+namesOfColumns <- c("college","stabbr", "region", "onoffcampus","netcost","incomelevel","totalprice","earlycareer","midcareer","makeworkbetter",
+                    "stemcareer")
+
+names(dfCollegeData) <- namesOfColumns
+
+#rename STATE column as ST above, add state now
+dfCollegeData$state <- tolower(state.name[match(dfCollegeData$stabbr,state.abb)])
+#add column for Financial Aid
+dfCollegeData$finaid <- dfCollegeData$totalprice - dfCollegeData$netcost
+
+#str(dfCollegeData)
+head(dfCollegeData)
+```
+
+The above is a sample of the data set to show how it is now organized. We can now explore the data set and create charts.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#REFERENCE: http://www.sthda.com/english/articles/24-ggpubr-publication-ready-plots/81-ggplot2-easy-way-to-mix-multiple-graphs-on-the-same-page/
+
+#Create data frame of state abbreviation, region, mean NET, mean TOTAL cost of tuition, mean Early career salary and mean Mid career salary:
+df1 <- dfCollegeData %>% select(college, region, stabbr, incomelevel, netcost, totalprice,
+              earlycareer, midcareer, finaid) #df1 will be used as the base data frame
+
+#subset of df1 above:   create group means by state  
+df3byStates <- df1 %>%
+  group_by(stabbr, region) %>%
+  summarize(NET=mean(netcost), TOTAL=mean(totalprice)/1000, EARLY=mean(earlycareer)/1000,
+            MID=mean(midcareer)/1000, FA=mean(finaid)/1000) 
+
+df3byStates$tempvar <- "Tuition (in thousands)"
+bpCoT <- ggbarplot(df3byStates, x="stabbr", y="TOTAL", fill="region",
+          color = "white",            # Set bar border colors to white
+          palette = "jco",            # jco journal color palette. see ?ggpar
+          sort.val = "asc",           # Sort the value in ascending order
+          sort.by.groups = TRUE,      # Sort inside each group
+          x.text.angle = 90           # Rotate vertically x axis texts
+          ) + coord_cartesian(ylim=c(0,120)) +
+          labs(x= NULL, y="Tuition (thousands)") +
+          theme(legend.position="right", axis.text=element_text(size=10)) +
+                          facet_grid(. ~ tempvar) +
+                          theme(strip.background = element_rect(fill="#228b22"),
+          strip.text = element_text(size=12, colour="white"))
+bpCoT
+```
+
+We can see from this chart that the Midwest and Northeast regions are generally
+more expensive than the South and West regions. States like Wyoming, Utah, and
+North Dakota have the lowest cost while New York, Massachusetts, and
+Pennsylvania are the most expensive and all in the Northeast.
+
+Next, we examined the state and regional effects of early career salary.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df3byStates$tempvar <- "Early Career Salary (in thousands)"
+
+bpEarly <- ggbarplot(df3byStates, x="stabbr", y="EARLY", fill="region",
+          color = "white",            # Set bar border colors to white
+          palette = "jco",            # jco journal color palette. see ?ggpar
+          sort.val = "asc",           # Sort the value in ascending order
+          sort.by.groups = TRUE,      # Sort inside each group
+          x.text.angle = 90) +        # Rotate vertically x axis texts
+          coord_cartesian(ylim=c(0,120)) + 
+          labs(x= NULL, y="Early Career Salary (thousands)") +
+          theme(legend.position="right", axis.text=element_text(size=10)) +
+                          facet_grid(. ~ tempvar) +
+                          theme(strip.background = element_rect(fill="#228b22"),
+          strip.text = element_text(size=12, colour="white"))
+bpEarly
+```
+
+Average early career salaries range from about $44,000 to $60,000, with the 
+highest salaries mostly in the same states as the highest cost: Pennsylvania,
+Massachusetts, and New York. California also has some of the highest early 
+career salaries. The lowest early career salaries are in Mississippi,
+Arkansas, and Kentucky. Interestingly Wyoming and Utah, which were two of the
+lowest cost tuition states, are above average in early career salary.
+
+We then examined the potential mid-career salary earnings from each school, 
+state, and region.
+
+```{r echo=FALSE, vmessage=FALSE, warning=FALSE}
+df3byStates$tempvar <- "Mid-Career Salary (in thousands)"
+
+bpMid <- ggbarplot(df3byStates, x="stabbr", y="MID", fill="region",
+          color = "white",            # Set bar border colors to white
+          palette = "jco",            # jco journal color palett. see ?ggpar
+          sort.val = "asc",           # Sort the value in ascending order
+          sort.by.groups = TRUE,      # Sort inside each group
+          x.text.angle = 90           # Rotate vertically x axis texts
+          ) + coord_cartesian(ylim=c(0,120)) +
+          labs(x= NULL, y="Mid-career Salary (thousands)")+ theme(legend.position="right",
+                                                      axis.text=element_text(size=10)) +  
+          facet_grid(. ~ tempvar) + theme(strip.background = element_rect(fill="#228b22"),
+          strip.text = element_text(size=12, colour="white"))
+bpMid
+```
+
+As expected, mid-career salaries are significantly higher than early career in all states by at least $25,000 annually, with some states doubling the earnings of graduates. Mid-career
+salaries follow a similar trend as the early career in the Northeast, but California
+has the highest average salary overall from the West. Mid-career salaries average from about $85,000 to $125,000.
+
+Finally, we look at the differences in the average financial aid provided, again
+divided by region and state.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df3byStates$tempvar <- "Financial Aid (in thousands)"
+
+bpFA <- ggbarplot(df3byStates, x="stabbr", y="FA", fill="region",
+          color = "white",            # Set bar border colors to white
+          palette = "jco",            # jco journal color palett. see ?ggpar
+          sort.val = "asc",           # Sort the value in ascending order
+          sort.by.groups = TRUE,      # Sort inside each group
+          x.text.angle = 90           # Rotate vertically x axis texts
+          ) + coord_cartesian(ylim=c(0,120)) +
+          labs(x= NULL, y="Financial Aid (thousands)")+ theme(legend.position="right", axis.text=element_text(size=10)) + 
+          facet_grid(. ~ tempvar) + theme(strip.background = element_rect(fill="#228b22"),
+          strip.text = element_text(size=12, colour="white"))
+bpFA
+```
+
+Schools in the Mid-West and Northeast provide the most financial aid, but also had the highest total cost. California also offers a high level of financial aid to students. Utah and Wyoming, two of the least expensive states, also provide the least financial aid. 
+
+Finally, we combine all 4 of these charts to see if all the charts together help us better understand relationships in the data.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=12, fig.width=8}
+#arrange on one page
+ggarrange(bpCoT, bpFA, bpEarly, bpMid, ncol = 1, nrow = 4)
+```
+
+When seen together, there is a clear trend that the mid-west and northeast cost the most but also have the most financial aid, combined with the highest earning potential in the early and mid-career, with the notable exception of California in the west. While these charts give us more understanding of the data, it does not really help us to select a school.
+ 
+Therefore, we look at another dimension from the data. The cost of college is affected by whether the student chooses to live on or off campus. The below charts show the average cost to attend school in each state.
+
+```{r echo=FALSE, vmessage=FALSE, warning=FALSE}
+dfCampusAnalysis <- dfCollegeData %>% select(college, stabbr, totalprice, onoffcampus, region) %>% unique() %>% arrange(region, stabbr)
+
+plotOffCampus <- dfCampusAnalysis %>%
+  filter(onoffcampus == "Off Campus") %>% 
+  group_by(region) %>% 
+  arrange(region) %>% 
+  ggplot(aes(x = stabbr, y = totalprice/1000, fill = region)) + geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 90), plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Off Campus across states") + 
+  geom_hline(yintercept = 35, size=2) +
+  labs(x= NULL, y="Tuition (in thousands)")
+
+plotOnCampus <- dfCampusAnalysis %>%
+  filter(onoffcampus == "On Campus") %>% 
+  group_by(stabbr, onoffcampus) %>% 
+  arrange(totalprice) %>% 
+  ggplot(aes(x = stabbr, y = totalprice/1000, fill = region)) + geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 90), plot.title = element_text(hjust = 0.5)) +
+  ggtitle("On Campus across states") + 
+  geom_hline(yintercept = 37, size=2)+
+  labs(x= NULL, y="Tuition (in thousands)")
+
+grid.arrange(plotOnCampus, plotOffCampus, nrow = 2)
+```
+
+These box plots compare the cost of college from living on or off campus. Each boxplot represents the cost to attend college in that state with the box itself representing the middle 50% of the data. The horizontal line in each box is the mean, with the vertical lines extending out to show the highest and lowest costs. These plots show that it is clearly cheaper to live off campus while attending college with an off-campus average around $35,000 and on-campus around $37,000. Living off-campus saves about $2,000 annually.
+
+This is another illuminating aspect of our data, but it is still difficult to reach any conclusions. We need to be able to understand all of the previous information as a synthesized whole. Therefore, we created a scatterplot to show the combination of all the previously examined data.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#create subset of data:
+df6 <- df1 %>%
+  group_by(college, region, stabbr) %>%
+  summarize(NET=mean(netcost), SALARY=sum(earlycareer+midcareer),EARLY=earlycareer, MID=midcareer)
+
+scat	<- ggplot(df6,aes(x=NET,y=EARLY+MID),na.rm=TRUE) + geom_point(aes(size=1/NET,shape=region, color=region),na.rm=TRUE)+
+  ggtitle("Netcost of Tuition vs. Sum of Pay by Region") +
+  geom_hline(yintercept= 175000, color="blue",size=2) +
+  geom_vline(xintercept=20000, color="blue",size=2) +
+  labs(x="Net Cost", y="Salary Potential")
+scat
+
+#Create a table to show the best colleges
+#var to show best ratio
+OPP <- df6$NET/df6$SALARY
+
+df6$OPP <- OPP
+
+#sort by min of one and max of other
+dfBEST <- df6[order(-df6$NET, df6$SALARY),1:3] %>% unique()
+head(dfBEST)
+```
+
+This chart plots points for each school based on net cost along the bottom and
+salary potential, the sum of early and mid-career salaries, on the vertical. Each region is represented by both a shape and color to allow for color-blind individuals to see the data. The larger the shape, the cheaper the school. Shapes in the upper left quadrant are the most desirable based on these factors. The Northeast and West have the most schools in the desirable quadrant, with the Rhode Island School of Design and Spelman College in Georgia as the highest scored schools. The table below the chart shows the top 6 schools.
+
+Next, we would like to create a model to predict mid-career salaries. A good model will allow us to check mid-career salary for schools not in this data set or by changing data for schools already in the data. To do this we first need to divide our data set into a training and test set. For this analysis, we used two-thirds of our data set to train our models and one-third to test it. The first model we created is a Linear Model (LM) to predict mid-career salary.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#First we divided the data into training and testing data sets
+randIndex <- sample(1:dim(df1)[1]) #randomly samples indexes from the data set
+cutPoint <- floor(2*dim(df1)[1]/3) #creates a cutpoint for 2/3s of the data
+trainData <- df1[randIndex[1:cutPoint],] #sets the training data set to 2/3s
+                                         #of the total data
+testData <- df1[randIndex[(cutPoint+1):dim(df1)[1]],] #remaining data is for testing
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Create a model to predict the mid-career salary
+midCareerModel <- lm(formula = midcareer ~ totalprice + finaid + earlycareer, 
+                     data = trainData)
+summary(midCareerModel)
+```
+
+Our basic linear model using total price, financial aid, and early career earnings
+shows that these three variables are highly significant in determining mid-career salaries with p-values well below the 0.05 standard. The model explains about 97% of the variability in mid-career salary. 
+
+However, there are other non-numeric factors that could influence mid-career salary which are not included in the linear model, so we decided to see if an associative machine learning model could do better by including all the information in the data set.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Create a model that uses numerical and non-numerical data to predict mid-career
+#salary
+
+#Create a ksvm model. This code takes about 10 minutes to run
+svmOutput <- ksvm(midcareer ~ ., data=trainData,kernel="rbfdot",kpar="automatic",
+                  prob.model=TRUE) #C=5,cross=3
+svmOutput
+```
+
+We created a Kernel Support Vector Machine (KSVM) from the data set that resulted in 2,338 support vectors and a training error of only 0.006. Like the linear model, this seems to be a good model. Now that we have trained two different models, we need to figure out if one is superior by comparing their errors. We ran both models with the testing data set and calculated error as a percent difference between the known and predicted mid-career salary.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Create a table with the LM preditctions and calculate the error
+pred1 <- predict(midCareerModel, testData, type="response") 
+compTable1 <- data.frame(testData[,8], pred1[1:22370])
+names(compTable1) <- c("midcareer","LMprediction")
+compTable1$LMError <- round((compTable1$midcareer - 
+                         compTable1$LMprediction)/compTable1$midcareer*100,2)
+
+#Create a table with the LM preditctions and calculate the error
+pred <- predict(svmOutput, testData, type="votes") 
+compTable <- data.frame(testData[,8], pred[1:22370])
+names(compTable) <- c("midcareer","KSVMprediction")
+compTable$KSVMError <- round((compTable$midcareer - 
+                          compTable$KSVMprediction)/compTable$midcareer*100,2)
+
+#Combine the two tables
+compTable3 <- data.frame(compTable,compTable1$LMprediction,compTable1$LMError)
+names(compTable3) <- c("Expected Mid-Career","KSVMprediction","KSVMError",
+                       "LMprediction","LMError")
+head(compTable3)
+```
+
+This table shows us the known, expected values for mid-career salary, the predicted salary for both models, and the error for each prediction by each model. Both models seem to have low random error which is good. The KSVM error seems lower but this is only the first few entries; the entire set of data is more easily seen by graphing the errors side by side. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+LMplot <- ggplot(compTable1, aes(x=LMprediction/1000, y=midcareer/1000, size=LMError)) + 
+    geom_point() +
+    ggtitle("LM Errors (in thousands)") +
+    labs(x="Mid-Career Salary", y="LM Prediction")
+
+#Create variables to display the average, minimum, and maximum error
+avgPredErr1 <- round(mean(compTable1$LMError),2)
+minPredErr1 <- round(min(compTable1$LMError),0)
+maxPredErr1 <- round(max(compTable1$LMError),0)
+
+#Create a scatterplot of the KVSM model errors
+KSVMplot <- ggplot(compTable, aes(x=KSVMprediction/1000, y=midcareer/1000, size=KSVMError)) + 
+    geom_point() +
+    ggtitle("KSVM Errors (in thousands)")+
+    labs(x="Mid-Career Salary", y="KSVM Prediction")
+
+#Create variables to display the average, minimum, and maximum error
+avgPredErr <- round(mean(compTable$KSVMError),2)
+minPredErr <- round(min(compTable$KSVMError),0)
+maxPredErr <- round(max(compTable$KSVMError),0)
+
+#Plot both models side by side
+grid.arrange(LMplot, KSVMplot, ncol = 2)
+```
+
+Comparing the plot of errors from both models, we can see that the KVSM model tracks closer to the true data than the linear model. Both models have about the same overall error with `r avgPredErr1`% for the linear model and `r avgPredErr`% for the KVSM. The linear model has a wider range of error (`r minPredErr1`%,`r maxPredErr1`%) compared to the KSVM values (`r minPredErr`%,`r maxPredErr`%). The narrower range of error makes the KVSM more accurate, but the linear model runs much faster, seconds compared to about ten minutes. Depending on the relative importance of speed and accuracy to a user, either model seems sufficient to predict mid-career salary.
+
+
+___CONCLUSION___
+For someone looking to find schools with a good cost to future salary ratio, the West and Northeast regions have the most schools with favorable ratios based on our data set and predictive models. Both predictive models developed for this analysis are relatively accurate with the linear model being much faster and the KVSM having lower error. Users can decide whether they would like higher accuracy and use KSVM, or faster processing and use the LM.
+
+These models can be used by both data science professionals to analyze college choice as well as potential students and their families to make a more informed decision about where to attend college.
+
+Future analysis of this problem could include other factors of interest including college major, cost of living, school loan type, and interest rates. These, or other factors, could make for a more robust analysis allowing for better decision making when choosing a school.
